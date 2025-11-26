@@ -45,9 +45,16 @@ export class CreateSingleBookingDto {
   @IsDateString()
   startDateTime: string;
 
-  @ApiProperty({ example: '2025-11-25T16:00:00Z', description: 'Booking end date and time (ISO format)' })
+  @ApiPropertyOptional({ example: '2025-11-25T16:00:00Z', description: 'Booking end date and time (ISO format). Either this or durationMinutes is required.' })
   @IsDateString()
-  endDateTime: string;
+  @IsOptional()
+  endDateTime?: string;
+
+  @ApiPropertyOptional({ example: 90, description: 'Duration in minutes. Either this or endDateTime is required.' })
+  @IsNumber()
+  @Min(15)
+  @IsOptional()
+  durationMinutes?: number;
 
   @ApiProperty({ example: 150, description: 'Booking price in SAR' })
   @IsNumber()
@@ -98,9 +105,20 @@ export class CreateFixedBookingDto {
   @Min(15)
   durationMinutes: number;
 
-  @ApiProperty({ example: 'MONDAY', enum: DayOfWeek, description: 'Day of week for recurring booking' })
+  @ApiPropertyOptional({ example: 'MONDAY', enum: DayOfWeek, description: 'Single day of week for recurring booking (deprecated, use repeatedDaysOfWeek)' })
   @IsEnum(DayOfWeek)
-  repeatedDayOfWeek: DayOfWeek;
+  @IsOptional()
+  repeatedDayOfWeek?: DayOfWeek;
+
+  @ApiPropertyOptional({ 
+    example: ['MONDAY', 'WEDNESDAY', 'FRIDAY'], 
+    enum: DayOfWeek, 
+    isArray: true,
+    description: 'Multiple days of week for recurring bookings' 
+  })
+  @IsEnum(DayOfWeek, { each: true })
+  @IsOptional()
+  repeatedDaysOfWeek?: DayOfWeek[];
 
   @ApiProperty({ example: '2026-11-25', description: 'Date when recurring bookings should end (ISO format)' })
   @IsDateString()

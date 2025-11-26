@@ -44,6 +44,9 @@ export class Booking {
   @Prop({ type: String, enum: DayOfWeek })
   repeatedDayOfWeek?: DayOfWeek;
 
+  @Prop({ type: [String], enum: DayOfWeek })
+  repeatedDaysOfWeek?: DayOfWeek[]; // Multiple days selection for FIXED bookings
+
   @Prop({ type: Date })
   recurrenceEndDate?: Date;
 

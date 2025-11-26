@@ -21,6 +21,11 @@ export interface BookingInfo {
   coachName?: string;
   phone: string;
   notes?: string;
+  bookingType: string;
+  seriesId?: string;
+  repeatedDayOfWeek?: string;
+  repeatedDaysOfWeek?: string[];
+  recurrenceEndDate?: Date;
 }
 
 @Injectable()
@@ -109,6 +114,11 @@ export class SchedulesService {
         coachName: coach?.fullName,
         phone: booking.phone,
         notes: booking.notes,
+        bookingType: booking.bookingType,
+        seriesId: booking.seriesId,
+        repeatedDayOfWeek: booking.repeatedDayOfWeek,
+        repeatedDaysOfWeek: booking.repeatedDaysOfWeek,
+        recurrenceEndDate: booking.recurrenceEndDate,
       };
 
       courtMap.get(courtId)!.bookings.push(bookingInfo);

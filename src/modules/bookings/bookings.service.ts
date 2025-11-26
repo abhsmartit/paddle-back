@@ -59,9 +59,21 @@ export class BookingsService {
     dto: CreateSingleBookingDto,
     userId: string,
   ): Promise<Booking> {
+    if (!dto.endDateTime && !dto.durationMinutes) {
+      throw new BadRequestException('Either endDateTime or durationMinutes must be provided');
+    }
+
     const startDateTime = parseISO(dto.startDateTime);
-    const endDateTime = parseISO(dto.endDateTime);
-    const durationMinutes = differenceInMinutes(endDateTime, startDateTime);
+    let endDateTime: Date;
+    let durationMinutes: number;
+
+    if (dto.endDateTime) {
+      endDateTime = parseISO(dto.endDateTime);
+      durationMinutes = differenceInMinutes(endDateTime, startDateTime);
+    } else {
+      durationMinutes = dto.durationMinutes!;
+      endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60000);
+    }
 
     // Validate court overlap
     await this.validateCourtAvailability(dto.courtId, startDateTime, endDateTime);
@@ -123,21 +135,54 @@ export class BookingsService {
     const endDate = parseISO(dto.recurrenceEndDate);
     const seriesId = randomUUID();
 
-    // Generate all occurrences
-    const occurrences = this.generateRecurringOccurrences(
+    // Support both single day and multiple days
+    const daysOfWeek = dto.repeatedDaysOfWeek && dto.repeatedDaysOfWeek.length > 0
+      ? dto.repeatedDaysOfWeek
+      : dto.repeatedDayOfWeek
+      ? [dto.repeatedDayOfWeek]
+      : [];
+
+    if (daysOfWeek.length === 0) {
+      throw new BadRequestException('Either repeatedDayOfWeek or repeatedDaysOfWeek must be provided');
+    }
+
+    // Generate all occurrences for all selected days
+    const occurrences = this.generateRecurringOccurrencesMultipleDays(
       startDate,
       endDate,
-      dto.repeatedDayOfWeek,
+      daysOfWeek,
       dto.durationMinutes,
     );
 
-    // Validate all occurrences for overlaps
-    for (const { start, end } of occurrences) {
-      await this.validateCourtAvailability(dto.courtId, start, end);
+    if (occurrences.length === 0) {
+      throw new BadRequestException('No valid occurrences found between start and end dates');
     }
 
-    // Create all booking instances
-    const bookings = occurrences.map(
+    // Validate all occurrences for overlaps - but don't fail entire series if one fails
+    const validOccurrences: Array<{ start: Date; end: Date }> = [];
+    const failedOccurrences: Array<{ start: Date; end: Date; error: string }> = [];
+
+    for (const { start, end } of occurrences) {
+      try {
+        await this.validateCourtAvailability(dto.courtId, start, end);
+        validOccurrences.push({ start, end });
+      } catch (error) {
+        failedOccurrences.push({
+          start,
+          end,
+          error: error.message || 'Validation failed',
+        });
+      }
+    }
+
+    if (validOccurrences.length === 0) {
+      throw new ConflictException(
+        `All ${occurrences.length} occurrences have conflicts. Cannot create any bookings.`,
+      );
+    }
+
+    // Create all booking instances for valid occurrences only
+    const bookings = validOccurrences.map(
       ({ start, end }) =>
         new this.bookingModel({
           clubId,
@@ -150,6 +195,7 @@ export class BookingsService {
           endDateTime: end,
           durationMinutes: dto.durationMinutes,
           repeatedDayOfWeek: dto.repeatedDayOfWeek,
+          repeatedDaysOfWeek: daysOfWeek,
           recurrenceEndDate: endDate,
           seriesId,
           price: dto.price,
@@ -159,7 +205,16 @@ export class BookingsService {
         }),
     );
 
-    return this.bookingModel.insertMany(bookings);
+    const result = await this.bookingModel.insertMany(bookings);
+
+    // Log warning if some occurrences failed
+    if (failedOccurrences.length > 0) {
+      console.warn(
+        `Created ${result.length} bookings, but ${failedOccurrences.length} occurrences were skipped due to conflicts`,
+      );
+    }
+
+    return result;
   }
 
   private generateRecurringOccurrences(
@@ -195,6 +250,45 @@ export class BookingsService {
 
       // Move to next week
       current = addWeeks(current, 1);
+    }
+
+    return occurrences;
+  }
+
+  private generateRecurringOccurrencesMultipleDays(
+    startDate: Date,
+    endDate: Date,
+    daysOfWeek: DayOfWeek[],
+    durationMinutes: number,
+  ): Array<{ start: Date; end: Date }> {
+    const occurrences: Array<{ start: Date; end: Date }> = [];
+    const dayMap = {
+      [DayOfWeek.SUNDAY]: 0,
+      [DayOfWeek.MONDAY]: 1,
+      [DayOfWeek.TUESDAY]: 2,
+      [DayOfWeek.WEDNESDAY]: 3,
+      [DayOfWeek.THURSDAY]: 4,
+      [DayOfWeek.FRIDAY]: 5,
+      [DayOfWeek.SATURDAY]: 6,
+    };
+
+    const targetDays = daysOfWeek.map(day => dayMap[day]);
+
+    // Iterate through each day in the date range
+    let current = new Date(startDate.getTime());
+    
+    while (current <= endDate) {
+      const currentDay = getDay(current);
+      
+      // Check if current day is in the selected days
+      if (targetDays.includes(currentDay)) {
+        const start = new Date(current.getTime());
+        const end = new Date(current.getTime() + durationMinutes * 60000);
+        occurrences.push({ start, end });
+      }
+      
+      // Move to next day
+      current = addDays(current, 1);
     }
 
     return occurrences;
