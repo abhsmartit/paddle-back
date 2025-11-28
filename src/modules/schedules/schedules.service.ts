@@ -2,12 +2,20 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Booking, BookingDocument } from '../bookings/schemas/booking.schema';
+import { ClosedDatesService } from '../closed-dates/closed-dates.service';
 import { parseISO, startOfDay, endOfDay } from 'date-fns';
 
 export interface CourtSchedule {
   courtId: string;
   courtName: string;
   bookings: BookingInfo[];
+  closedDates?: ClosedDateInfo[];
+}
+
+export interface ClosedDateInfo {
+  closedDateId: string;
+  closedDate: Date;
+  reason: string;
 }
 
 export interface BookingInfo {
@@ -32,6 +40,7 @@ export interface BookingInfo {
 export class SchedulesService {
   constructor(
     @InjectModel(Booking.name) private bookingModel: Model<BookingDocument>,
+    private closedDatesService: ClosedDatesService,
   ) {}
 
   async getDaySchedule(clubId: string, date: string): Promise<CourtSchedule[]> {
@@ -122,6 +131,32 @@ export class SchedulesService {
       };
 
       courtMap.get(courtId)!.bookings.push(bookingInfo);
+    }
+
+    // Get closed dates for the range
+    const closedDates = await this.closedDatesService.findAll(
+      clubId,
+      startDate.toISOString().split('T')[0],
+    );
+    console.log(   clubId,
+      startDate.toISOString().split('T')[0],
+      endDate.toISOString().split('T')[0]);
+    
+    console.log(closedDates ,"closedDates");
+    
+
+    // Add closed dates to all courts (club-wide closure)
+    for (const closedDate of closedDates) {
+      for (const courtSchedule of courtMap.values()) {
+        if (!courtSchedule.closedDates) {
+          courtSchedule.closedDates = [];
+        }
+        courtSchedule.closedDates.push({
+          closedDateId: closedDate._id.toString(),
+          closedDate: closedDate.closedDate,
+          reason: closedDate.reason,
+        });
+      }
     }
 
     return Array.from(courtMap.values());

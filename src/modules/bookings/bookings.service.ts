@@ -14,14 +14,16 @@ import {
   CreateCoachBookingDto,
 } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
-import { parseISO, differenceInMinutes, addDays, addWeeks, getDay } from 'date-fns';
+import { parseISO, differenceInMinutes, addDays, addWeeks, getDay, startOfDay } from 'date-fns';
 import { randomUUID } from 'crypto';
 import { BookingType, DayOfWeek } from '@/common/enums';
+import { ClosedDatesService } from '../closed-dates/closed-dates.service';
 
 @Injectable()
 export class BookingsService {
   constructor(
     @InjectModel(Booking.name) private bookingModel: Model<BookingDocument>,
+    private closedDatesService: ClosedDatesService,
   ) {}
 
   async create(
@@ -75,6 +77,18 @@ export class BookingsService {
       endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60000);
     }
 
+    // Check if court is closed on this date
+    const closedCheck = await this.closedDatesService.isCourtClosed(
+      clubId,
+      dto.courtId,
+      startDateTime,
+    );
+    if (closedCheck.isClosed) {
+      throw new ConflictException(
+        `Court is closed on this date. Reason: ${closedCheck.reason}`,
+      );
+    }
+
     // Validate court overlap
     await this.validateCourtAvailability(dto.courtId, startDateTime, endDateTime);
 
@@ -106,6 +120,18 @@ export class BookingsService {
 
     if (!dto.coachId) {
       throw new BadRequestException('Coach booking requires coachId');
+    }
+
+    // Check if court is closed on this date
+    const closedCheck = await this.closedDatesService.isCourtClosed(
+      clubId,
+      dto.courtId,
+      startDateTime,
+    );
+    if (closedCheck.isClosed) {
+      throw new ConflictException(
+        `Court is closed on this date. Reason: ${closedCheck.reason}`,
+      );
     }
 
     // Validate court overlap
@@ -158,11 +184,32 @@ export class BookingsService {
       throw new BadRequestException('No valid occurrences found between start and end dates');
     }
 
-    // Validate all occurrences for overlaps - but don't fail entire series if one fails
+    // Get all closed dates in the range
+    const closedDates = await this.closedDatesService.getClosedDatesInRange(
+      clubId,
+      startDate,
+      endDate,
+    );
+
+    // Filter out occurrences on closed dates
+    const closedDaysSet = new Set(
+      closedDates.map(d => startOfDay(d).getTime()),
+    );
+    const availableOccurrences = occurrences.filter(
+      ({ start }) => !closedDaysSet.has(startOfDay(start).getTime()),
+    );
+
+    if (availableOccurrences.length === 0) {
+      throw new ConflictException(
+        'All occurrences fall on closed dates. No bookings can be created.',
+      );
+    }
+
+    // Validate all available occurrences for overlaps - but don't fail entire series if one fails
     const validOccurrences: Array<{ start: Date; end: Date }> = [];
     const failedOccurrences: Array<{ start: Date; end: Date; error: string }> = [];
 
-    for (const { start, end } of occurrences) {
+    for (const { start, end } of availableOccurrences) {
       try {
         await this.validateCourtAvailability(dto.courtId, start, end);
         validOccurrences.push({ start, end });

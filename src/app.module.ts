@@ -14,6 +14,7 @@ import { BookingCategoriesModule } from './modules/booking-categories/booking-ca
 import { BookingsModule } from './modules/bookings/bookings.module';
 import { SchedulesModule } from './modules/schedules/schedules.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { ClosedDatesModule } from './modules/closed-dates/closed-dates.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
     BookingsModule,
     SchedulesModule,
     PaymentsModule,
+    ClosedDatesModule,
   ],
 })
 export class AppModule {}

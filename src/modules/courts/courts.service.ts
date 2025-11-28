@@ -27,9 +27,7 @@ export class CourtsService {
   }
 
   async findByClub(clubId: string): Promise<Court[]> {
-    console.log(clubId ,"clubId");
     const courts = await this.courtModel.find({ clubId }).exec();
-    console.log(courts ,"courts");
     
     return courts;
   }
