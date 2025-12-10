@@ -4,6 +4,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
 import jwtConfig from './config/jwt.config';
+import { AppController } from './app.controller';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { ClubsModule } from './modules/clubs/clubs.module';
@@ -41,5 +42,6 @@ import { ClosedDatesModule } from './modules/closed-dates/closed-dates.module';
     PaymentsModule,
     ClosedDatesModule,
   ],
+  controllers: [AppController],
 })
 export class AppModule {}
