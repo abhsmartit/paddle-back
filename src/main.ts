@@ -46,6 +46,19 @@ async function bootstrap() {
   await app.listen(port);
   console.log(`🚀 Padel Club API is running on: http://localhost:${port}`);
   console.log(`📚 Swagger documentation: http://localhost:${port}/api`);
+  
+  return app;
 }
 
-bootstrap();
+// For local development
+if (require.main === module) {
+  bootstrap();
+}
+
+// Export for Vercel serverless
+export default async (req, res) => {
+  const app = await bootstrap();
+  await app.init();
+  const expressApp = app.getHttpAdapter().getInstance();
+  return expressApp(req, res);
+};
